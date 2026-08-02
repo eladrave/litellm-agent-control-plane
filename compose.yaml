@@ -84,6 +84,33 @@ services:
       - lap
       - opencode
 
+  codex:
+    profiles: ["codex"]
+    build: ./templates/codex
+    environment:
+      MODEL_BASE_URL: ${CODEX_MODEL_BASE_URL:-https://api.openai.com/v1}
+      MODEL_API_KEY: ${CODEX_MODEL_API_KEY:-}
+      DEFAULT_MODEL: ${CODEX_MODEL:-gpt-5.6-sol-high}
+      MODEL_MODELS: ${CODEX_MODELS:-gpt-5.6-sol-high}
+      RUNTIME_API_KEY: ${CODEX_RUNTIME_API_KEY:-local-codex-key}
+    volumes:
+      - codex-data:/data
+      - codex-home:/codex-home
+
+  register-codex:
+    <<: *runtime-registration
+    profiles: ["codex"]
+    environment:
+      LAP_URL: http://lap:4000
+      LAP_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-local}
+      RUNTIME_ALIAS: local-codex
+      RUNTIME_API_SPEC: claude_managed_agents
+      RUNTIME_API_BASE: http://codex:8080
+      RUNTIME_API_KEY: ${CODEX_RUNTIME_API_KEY:-local-codex-key}
+    depends_on:
+      - lap
+      - codex
+
   deepagents:
     profiles: ["deepagents"]
     build: ./templates/deepagents
@@ -172,3 +199,5 @@ volumes:
   deepagents-data:
   hermes-data:
   openclaw-data:
+  codex-data:
+  codex-home:
