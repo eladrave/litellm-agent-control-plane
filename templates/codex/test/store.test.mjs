@@ -24,5 +24,7 @@ test("persists agents, sessions, and ordered events", (t) => {
 
   store.insertEvent(session.id, "event-1", { event: "agent.message", data: { content: [] } });
   store.insertEvent(session.id, "event-1", { event: "duplicate", data: {} });
-  assert.equal(store.listEvents(session.id).length, 1);
+  const events = store.listEvents(session.id);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].event_id, "event-1");
 });

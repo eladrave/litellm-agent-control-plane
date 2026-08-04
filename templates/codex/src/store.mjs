@@ -103,8 +103,12 @@ export function createStore(dbPath) {
         VALUES(?,?,?)`).run(sessionId, eventId, JSON.stringify(event));
     },
     listEvents(sessionId) {
-      return db.prepare(`SELECT seq,event_json FROM session_events WHERE session_id=? ORDER BY seq`)
-        .all(sessionId).map((row) => ({ seq: row.seq, ...JSON.parse(row.event_json) }));
+      return db.prepare(`SELECT seq,event_id,event_json FROM session_events WHERE session_id=? ORDER BY seq`)
+        .all(sessionId).map((row) => ({
+          ...JSON.parse(row.event_json),
+          seq: row.seq,
+          event_id: row.event_id,
+        }));
     },
     close: () => db.close(),
   };
