@@ -70,6 +70,12 @@ const SPEC_LABELS: Record<string, string> = {
 
 const RUNTIME_OPTIONS = [
   {
+    value: "codex",
+    label: "Codex app-server",
+    apiSpec: "claude_managed_agents",
+    defaultApiBase: "",
+  },
+  {
     value: "claude_managed_agents",
     label: "Claude Managed Agents",
     apiSpec: "claude_managed_agents",
@@ -227,6 +233,7 @@ function AddHarnessModal({
       return;
     }
     const matchingOption =
+      RUNTIME_OPTIONS.find((option) => option.value === template.id)?.value ??
       RUNTIME_OPTIONS.find((option) => option.apiSpec === template.apiSpec)?.value ??
       "claude_managed_agents";
     setAlias(template.runtimeAlias);
