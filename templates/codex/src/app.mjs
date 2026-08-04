@@ -35,7 +35,7 @@ export function createApp({ store, codex, workspaceRoot, defaultModel, listModel
   function emit(sessionId, event) {
     const eventId = `evt_${++eventCounter}_${crypto.randomBytes(4).toString("hex")}`;
     store.insertEvent(sessionId, eventId, event);
-    liveEvents.emit(sessionId, event);
+    liveEvents.emit(sessionId, runtimeEventForClient({ event_id: eventId, ...event }));
   }
 
   codex.on("notification", (method, params) => {
@@ -154,11 +154,10 @@ export function createApp({ store, codex, workspaceRoot, defaultModel, listModel
   }));
 
   app.get("/v1/sessions/:id/events", (req, res) => {
-    const data = store.listEvents(req.params.id).map(({ seq, event, data }) => ({
-      type: event,
-      id: data?.id || `se_${seq}`,
-      ...(data || {}),
-    }));
+    const data = store.listEvents(req.params.id).map((stored) => {
+      const event = runtimeEventForClient(stored);
+      return { type: event.event, ...event.data };
+    });
     res.json({ data });
   });
 
@@ -169,10 +168,27 @@ export function createApp({ store, codex, workspaceRoot, defaultModel, listModel
     res.setHeader("connection", "keep-alive");
     res.flushHeaders?.();
     const write = (event) => res.write(`event: ${event.event}\ndata: ${JSON.stringify(event.data || {})}\n\n`);
-    for (const stored of store.listEvents(req.params.id)) write(stored);
+    for (const stored of store.listEvents(req.params.id)) write(runtimeEventForClient(stored));
     liveEvents.on(req.params.id, write);
     req.on("close", () => liveEvents.off(req.params.id, write));
   });
 
   return app;
+}
+
+export function runtimeEventForClient(stored) {
+  const data = stored?.data && typeof stored.data === "object" ? stored.data : {};
+  const itemId = typeof data.item_id === "string" && data.item_id
+    ? data.item_id
+    : typeof data.id === "string" && data.id
+      ? data.id
+      : null;
+  return {
+    event: stored.event,
+    data: {
+      ...data,
+      ...(itemId ? { item_id: itemId } : {}),
+      id: stored.event_id,
+    },
+  };
 }
