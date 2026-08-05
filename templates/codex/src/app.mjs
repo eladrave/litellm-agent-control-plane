@@ -14,7 +14,7 @@ import {
 
 const randomId = (prefix) => `${prefix}_${crypto.randomBytes(12).toString("hex")}`;
 
-export function createApp({ store, codex, workspaceRoot, defaultModel, listModels, runtimeApiKey }) {
+export function createApp({ store, codex, workspaceRoot, defaultModel, listModels, runtimeApiKey, createWorkspace }) {
   const app = express();
   const liveEvents = new EventEmitter();
   const environments = new Map();
@@ -114,8 +114,10 @@ export function createApp({ store, codex, workspaceRoot, defaultModel, listModel
   app.post("/v1/sessions", wrap(async (req, res) => {
     const agent = store.getAgent(req.body?.agent);
     if (!agent) return res.status(400).json({ error: "unknown agent" });
-    const workspace = path.join(workspaceRoot, randomId("workspace"));
-    mkdirSync(workspace, { recursive: true });
+    const workspace = createWorkspace
+      ? await createWorkspace(randomId("workspace"))
+      : path.join(workspaceRoot, randomId("workspace"));
+    if (!createWorkspace) mkdirSync(workspace, { recursive: true });
     const result = await codex.startThread({ cwd: workspace, model: agent.model, instructions: agent.system });
     const threadId = result?.thread?.id;
     if (!threadId) throw new Error("Codex thread/start response did not include a thread id");
