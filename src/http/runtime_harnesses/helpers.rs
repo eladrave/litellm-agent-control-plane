@@ -42,6 +42,8 @@ async fn default_harnesses(state: &AppState) -> Result<Vec<HarnessResponse>, Gat
             connected: credential.is_some(),
             masked_api_key: credential.map(|c| mask_api_key(&c.api_key)),
             tools: runtime_tools(entry.id).to_vec(),
+            codex_profile_type: None,
+            codex_controller_alias: None,
         });
     }
     Ok(result)
@@ -56,16 +58,22 @@ async fn custom_harnesses(
     let enc_key =
         credential_crypto::encryption_key(state.config.general_settings.master_key.as_deref()).ok();
     for harness in custom {
-        let (connected, masked_api_key, resolved_api_base) = if let Some(ref key) = enc_key {
+        let (
+            connected,
+            masked_api_key,
+            resolved_api_base,
+            codex_profile_type,
+            codex_controller_alias,
+        ) = if let Some(ref key) = enc_key {
             match load_harness_api_key(pool, &harness.alias, key).await {
-                Ok((api_key, api_base)) => {
+                Ok((api_key, api_base, profile_type, controller_alias)) => {
                     let masked = mask_api_key(&api_key);
-                    (true, Some(masked), api_base)
+                    (true, Some(masked), api_base, profile_type, controller_alias)
                 }
-                Err(_) => (false, None, harness.api_base.clone()),
+                Err(_) => (false, None, harness.api_base.clone(), None, None),
             }
         } else {
-            (false, None, harness.api_base.clone())
+            (false, None, harness.api_base.clone(), None, None)
         };
 
         result.push(HarnessResponse {
@@ -77,6 +85,8 @@ async fn custom_harnesses(
             connected,
             masked_api_key,
             tools: runtime_tools(&harness.api_spec).to_vec(),
+            codex_profile_type,
+            codex_controller_alias,
         });
     }
     Ok(result)
@@ -99,15 +109,17 @@ fn append_import_providers(result: &mut Vec<HarnessResponse>) {
             connected: false,
             masked_api_key: None,
             tools: runtime_tools(provider.api_spec).to_vec(),
+            codex_profile_type: None,
+            codex_controller_alias: None,
         });
     }
 }
 
-async fn load_harness_api_key(
+pub(super) async fn load_harness_api_key(
     pool: &sqlx::PgPool,
     alias: &str,
     enc_key: &str,
-) -> Result<(String, String), GatewayError> {
+) -> Result<(String, String, Option<String>, Option<String>), GatewayError> {
     let cred_name = harness_credential_name(alias);
     let row = credentials::get_by_name(pool, &cred_name)
         .await?
@@ -119,7 +131,15 @@ async fn load_harness_api_key(
     })?;
     let api_key = decrypt_field(vals, "api_key", enc_key)?;
     let api_base = decrypt_field(vals, "api_base", enc_key)?;
-    Ok((api_key, api_base))
+    let profile_type = vals
+        .get("codex_profile_type")
+        .and_then(|value| value.as_str())
+        .map(str::to_owned);
+    let controller_alias = vals
+        .get("codex_controller_alias")
+        .and_then(|value| value.as_str())
+        .map(str::to_owned);
+    Ok((api_key, api_base, profile_type, controller_alias))
 }
 
 pub(super) fn decrypt_field(
@@ -131,6 +151,15 @@ pub(super) fn decrypt_field(
         GatewayError::InvalidConfig(format!("harness credential missing field: {field}"))
     })?;
     credential_crypto::decrypt_value(enc, key)
+}
+
+pub(super) fn codex_profile_metadata(
+    values: &serde_json::Map<String, serde_json::Value>,
+) -> Option<(&str, &str)> {
+    Some((
+        values.get("codex_profile_type")?.as_str()?,
+        values.get("codex_controller_alias")?.as_str()?,
+    ))
 }
 
 #[cfg(test)]
@@ -148,11 +177,33 @@ mod tests {
             connected: false,
             masked_api_key: None,
             tools: Vec::new(),
+            codex_profile_type: None,
+            codex_controller_alias: None,
         }];
 
         append_import_providers(&mut harnesses);
 
         assert_eq!(harnesses.len(), 1);
         assert_eq!(harnesses[0].alias, "elastic_agent_builder");
+    }
+
+    #[test]
+    fn reads_codex_profile_metadata_only_when_complete() {
+        let complete = serde_json::json!({
+            "codex_profile_type": "chatgpt",
+            "codex_controller_alias": "Codex-app-server",
+        });
+        assert_eq!(
+            codex_profile_metadata(complete.as_object().unwrap()),
+            Some(("chatgpt", "Codex-app-server"))
+        );
+        assert_eq!(
+            codex_profile_metadata(
+                serde_json::json!({ "codex_profile_type": "chatgpt" })
+                    .as_object()
+                    .unwrap()
+            ),
+            None
+        );
     }
 }
