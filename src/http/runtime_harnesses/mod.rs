@@ -1,5 +1,5 @@
 mod codex;
-pub(super) mod helpers;
+pub(crate) mod helpers;
 pub use codex::{
     cancel_login as cancel_codex_login, create as create_codex_connection,
     delete as delete_codex_connection, list as list_codex_connections,
