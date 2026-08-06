@@ -115,7 +115,7 @@ fn append_import_providers(result: &mut Vec<HarnessResponse>) {
     }
 }
 
-pub(super) async fn load_harness_api_key(
+pub(crate) async fn load_harness_api_key(
     pool: &sqlx::PgPool,
     alias: &str,
     enc_key: &str,
@@ -129,17 +129,43 @@ pub(super) async fn load_harness_api_key(
     let vals = row.credential_values.as_object().ok_or_else(|| {
         GatewayError::InvalidConfig("harness credential_values must be an object".to_owned())
     })?;
-    let api_key = decrypt_field(vals, "api_key", enc_key)?;
-    let api_base = decrypt_field(vals, "api_base", enc_key)?;
-    let profile_type = vals
-        .get("codex_profile_type")
-        .and_then(|value| value.as_str())
-        .map(str::to_owned);
-    let controller_alias = vals
-        .get("codex_controller_alias")
-        .and_then(|value| value.as_str())
-        .map(str::to_owned);
-    Ok((api_key, api_base, profile_type, controller_alias))
+    if let Some((profile_type, controller_alias)) = codex_profile_metadata(vals) {
+        let controller_credential =
+            credentials::get_by_name(pool, &harness_credential_name(controller_alias))
+                .await?
+                .ok_or_else(|| {
+                    GatewayError::InvalidJsonMessage(format!(
+                        "no credential for Codex controller: {controller_alias}"
+                    ))
+                })?;
+        let controller_values = controller_credential
+            .credential_values
+            .as_object()
+            .ok_or_else(|| {
+                GatewayError::InvalidConfig(
+                    "Codex controller credential_values must be an object".to_owned(),
+                )
+            })?;
+        let api_key = decrypt_field(controller_values, "api_key", enc_key)?;
+        let controller_base = decrypt_field(controller_values, "api_base", enc_key)?;
+        return Ok((
+            api_key,
+            codex_profile_api_base(&controller_base, alias),
+            Some(profile_type.to_owned()),
+            Some(controller_alias.to_owned()),
+        ));
+    }
+
+    Ok((
+        decrypt_field(vals, "api_key", enc_key)?,
+        decrypt_field(vals, "api_base", enc_key)?,
+        None,
+        None,
+    ))
+}
+
+fn codex_profile_api_base(controller_base: &str, alias: &str) -> String {
+    format!("{}/profiles/{alias}", controller_base.trim_end_matches('/'))
 }
 
 pub(super) fn decrypt_field(
@@ -204,6 +230,14 @@ mod tests {
                     .unwrap()
             ),
             None
+        );
+    }
+
+    #[test]
+    fn codex_profile_base_follows_controller_base() {
+        assert_eq!(
+            codex_profile_api_base("http://codex:8080/", "CodexChargpt"),
+            "http://codex:8080/profiles/CodexChargpt"
         );
     }
 }
