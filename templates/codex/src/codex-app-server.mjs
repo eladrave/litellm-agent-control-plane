@@ -14,7 +14,7 @@ export function normalizeBaseUrl(value) {
 }
 
 export class CodexAppServer extends EventEmitter {
-  constructor({ mode = "api", baseUrl, apiKey, defaultModel, codexHome, codexBin = "codex", ssh = null }) {
+  constructor({ mode = "api", baseUrl, apiKey, defaultModel, codexHome, codexBin = "codex", ssh = null, sandbox = null }) {
     super();
     this.mode = mode;
     this.baseUrl = baseUrl ? normalizeBaseUrl(baseUrl) : null;
@@ -23,6 +23,10 @@ export class CodexAppServer extends EventEmitter {
     this.codexHome = codexHome;
     this.codexBin = codexBin;
     this.ssh = ssh;
+    this.sandbox = sandbox || (mode === "remote_ssh"
+      ? "workspace-write"
+      : process.env.CODEX_LOCAL_SANDBOX || "workspace-write");
+    this.localPermissionProfile = process.env.CODEX_LOCAL_PERMISSION_PROFILE || ":danger-full-access";
     this.pending = new Map();
     this.threads = new Set();
     this.nextId = 1;
@@ -45,6 +49,7 @@ export class CodexAppServer extends EventEmitter {
 
   localArgs() {
     const args = ["app-server", "--listen", "stdio://"];
+    args.push("-c", `default_permissions=${toml(this.localPermissionProfile)}`);
     if (this.mode !== "api") return args;
     return args.concat([
       "-c", `model=${toml(this.defaultModel)}`,
@@ -157,7 +162,7 @@ export class CodexAppServer extends EventEmitter {
       cwd,
       model,
       approvalPolicy: "never",
-      sandbox: "workspace-write",
+      ...(this.mode === "remote_ssh" ? { sandbox: this.sandbox } : {}),
       developerInstructions: instructions || null,
       ephemeral: false,
       ...(this.mode === "api" ? { modelProvider: "runtime_backend" } : {}),
@@ -178,6 +183,7 @@ export class CodexAppServer extends EventEmitter {
       threadId,
       model,
       approvalPolicy: "never",
+      ...(this.mode === "remote_ssh" ? {} : { permissionProfile: this.localPermissionProfile }),
       input: [{ type: "text", text, text_elements: [] }],
     });
   }

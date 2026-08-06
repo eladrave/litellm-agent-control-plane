@@ -13,9 +13,16 @@ x-runtime-registration: &runtime-registration
       until curl -fsS "$$LAP_URL/health" >/dev/null; do
         sleep 1
       done
-      until curl -fsS "$$RUNTIME_API_BASE/health" >/dev/null; do
-        sleep 1
-      done
+      runtime_health_url="$${RUNTIME_HEALTH_URL:-$$RUNTIME_API_BASE/health}"
+      if [ -n "$${RUNTIME_HEALTH_API_KEY:-}" ]; then
+        until curl -fsS -H "X-API-Key: $$RUNTIME_HEALTH_API_KEY" "$$runtime_health_url" >/dev/null; do
+          sleep 1
+        done
+      else
+        until curl -fsS "$$runtime_health_url" >/dev/null; do
+          sleep 1
+        done
+      fi
 
       create_payload=$$(printf '{"alias":"%s","api_spec":"%s","api_base":"%s","api_key":"%s"}' "$$RUNTIME_ALIAS" "$$RUNTIME_API_SPEC" "$$RUNTIME_API_BASE" "$$RUNTIME_API_KEY")
       update_payload=$$(printf '{"api_base":"%s","api_key":"%s"}' "$$RUNTIME_API_BASE" "$$RUNTIME_API_KEY")
@@ -107,6 +114,8 @@ services:
       RUNTIME_API_SPEC: claude_managed_agents
       RUNTIME_API_BASE: http://codex:8080
       RUNTIME_API_KEY: ${CODEX_RUNTIME_API_KEY:-local-codex-key}
+      RUNTIME_HEALTH_URL: http://codex:8080/control/health
+      RUNTIME_HEALTH_API_KEY: ${CODEX_RUNTIME_API_KEY:-local-codex-key}
     depends_on:
       - lap
       - codex

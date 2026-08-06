@@ -10,6 +10,23 @@ test("formats SSH host keys like OpenSSH SHA256 fingerprints", () => {
   assert.match(fingerprintForKey(Buffer.from("host-key")), /^SHA256:[A-Za-z0-9+/]+$/);
 });
 
+test("keeps remote Codex sandboxed while using the container permission profile locally", async () => {
+  const local = new CodexAppServer({ mode: "chatgpt" });
+  const remote = new CodexAppServer({ mode: "remote_ssh" });
+  let localTurn;
+  let remoteTurn;
+  local.request = async (_method, params) => { localTurn = params; };
+  remote.request = async (_method, params) => { remoteTurn = params; };
+
+  assert.equal(local.localPermissionProfile, ":danger-full-access");
+  assert.deepEqual(local.localArgs().slice(-2), ["-c", 'default_permissions=":danger-full-access"']);
+  assert.equal(remote.sandbox, "workspace-write");
+  await local.startTurn("local-thread", "hello", "gpt-test");
+  await remote.startTurn("remote-thread", "hello", "gpt-test");
+  assert.equal(localTurn.permissionProfile, ":danger-full-access");
+  assert.equal(remoteTurn.permissionProfile, undefined);
+});
+
 test("ChatGPT mode uses native account and model RPCs without an API provider", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "fake-codex-"));
   const executable = path.join(root, "codex");
