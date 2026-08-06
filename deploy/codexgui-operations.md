@@ -1,5 +1,10 @@
 # codexgui production operations
 
+The complete deployment, upgrade, acceptance, and rollback runbook is
+[`docs/engineering/codexgui-deployment.mdx`](../docs/engineering/codexgui-deployment.mdx).
+This file remains a compact command reference for operators already familiar
+with that runbook.
+
 This deployment uses the host PostgreSQL service, the external Docker network
 `edge`, and the environment files below:
 
