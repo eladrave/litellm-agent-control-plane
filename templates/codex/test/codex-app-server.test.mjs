@@ -79,6 +79,28 @@ test("authenticates only the trusted platform MCP with the gateway credential en
   });
 });
 
+test("routes a trusted platform MCP over the private control-plane network", () => {
+  const env = {
+    LAP_GATEWAY_MCP_BASE_URL: "https://agents.example.test/gateway",
+    LAP_GATEWAY_MCP_INTERNAL_BASE_URL: "http://lap:4000/internal",
+    LAP_GATEWAY_API_KEY: "secret",
+  };
+  assert.deepEqual(threadMcpConfig([
+    {
+      type: "url",
+      name: "platform",
+      url: "https://agents.example.test/gateway/mcp/platform/agent_1?session_id=ses_1",
+    },
+  ], env), {
+    mcp_servers: {
+      platform: {
+        url: "http://lap:4000/internal/mcp/platform/agent_1?session_id=ses_1",
+        bearer_token_env_var: "LAP_GATEWAY_API_KEY",
+      },
+    },
+  });
+});
+
 test("refuses to expose the gateway credential to an untrusted platform MCP", () => {
   const env = {
     LAP_GATEWAY_MCP_BASE_URL: "https://agents.example.test",

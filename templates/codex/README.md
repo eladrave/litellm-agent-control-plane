@@ -39,6 +39,10 @@ Agents that use LAP platform MCPs, including `list_sub_agents` and
 `LAP_GATEWAY_MCP_BASE_URL`. The bridge exposes the key to Codex only by
 environment-variable name and only for a `platform` MCP URL on that trusted
 base URL; the credential value is never copied into thread configuration.
+`LAP_GATEWAY_MCP_INTERNAL_BASE_URL` may point platform MCP traffic at a private
+control-plane address so long-running sub-agent calls do not cross a public
+reverse proxy; the original public URL is still validated against the trusted
+base before it is rewritten.
 
 In LAP, register this root endpoint once as the Codex app-server controller.
 The Runtimes page then creates API, ChatGPT, and Remote SSH profiles through the
