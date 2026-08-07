@@ -79,6 +79,7 @@ test("authenticates only the trusted platform MCP with the gateway credential en
       platform: {
         url: "https://agents.example.test/mcp/platform/agent_1?session_id=ses_1",
         bearer_token_env_var: "LAP_GATEWAY_API_KEY",
+        tool_timeout_sec: 1860,
       },
     },
   });
@@ -101,6 +102,7 @@ test("routes a trusted platform MCP over the private control-plane network", () 
       platform: {
         url: "http://lap:4000/internal/mcp/platform/agent_1?session_id=ses_1",
         bearer_token_env_var: "LAP_GATEWAY_API_KEY",
+        tool_timeout_sec: 1860,
       },
     },
   });
@@ -123,6 +125,7 @@ test("disables native Codex collaboration for LAP platform MCP threads", () => {
       platform: {
         url: "http://lap:4000/mcp/platform/agent_1?session_id=ses_1",
         bearer_token_env_var: "LAP_GATEWAY_API_KEY",
+        tool_timeout_sec: 1860,
       },
     },
     features: { multi_agent: false },

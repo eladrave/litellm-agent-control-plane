@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use futures_util::StreamExt;
 use serde_json::{json, Value};
@@ -12,6 +12,8 @@ use crate::{
 };
 
 use super::{required_str, sub_agent_ids};
+
+const SUB_AGENT_RUN_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 pub async fn agent_memory(
     pool: &PgPool,
@@ -159,7 +161,7 @@ async fn collect_sub_agent_output(
         crate::http::sessions::runtime_event_stream_for_session(state, pool, session_id).await?;
     let mut text = String::new();
     let status: Result<&'static str, GatewayError> =
-        tokio::time::timeout(std::time::Duration::from_secs(300), async {
+        tokio::time::timeout(SUB_AGENT_RUN_TIMEOUT, async {
             while let Some(event) = stream.next().await {
                 let event = event.map_err(|error| GatewayError::SandboxError(error.to_string()))?;
                 match event.kind() {
