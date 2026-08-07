@@ -43,6 +43,8 @@ base URL; the credential value is never copied into thread configuration.
 control-plane address so long-running sub-agent calls do not cross a public
 reverse proxy; the original public URL is still validated against the trusted
 base before it is rewritten.
+Threads with the LAP platform MCP disable Codex's native collaboration tools,
+so configured LAP sub-agents remain the authoritative orchestration path.
 
 In LAP, register this root endpoint once as the Codex app-server controller.
 The Runtimes page then creates API, ChatGPT, and Remote SSH profiles through the
