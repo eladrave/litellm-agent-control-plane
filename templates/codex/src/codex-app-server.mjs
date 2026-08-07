@@ -22,7 +22,7 @@ function platformMcpCredential(parsed, env) {
   } catch {
     throw new Error("LAP_GATEWAY_MCP_BASE_URL must be an absolute HTTP(S) URL");
   }
-  if (!(["http:", "https:"].includes(trusted.protocol)) || !trusted.hostname) {
+  if (!(["http:", "https:"].includes(trusted.protocol)) || !trusted.hostname || trusted.username || trusted.password) {
     throw new Error("LAP_GATEWAY_MCP_BASE_URL must be an absolute HTTP(S) URL");
   }
   const basePath = trusted.pathname.replace(/\/+$/, "");
@@ -30,7 +30,26 @@ function platformMcpCredential(parsed, env) {
   if (parsed.origin !== trusted.origin || !parsed.pathname.startsWith(platformPath)) {
     throw new Error("Refusing to send the gateway credential to an untrusted platform MCP URL");
   }
-  return { bearer_token_env_var: "LAP_GATEWAY_API_KEY" };
+  const internalValue = String(env.LAP_GATEWAY_MCP_INTERNAL_BASE_URL || "").trim();
+  if (!internalValue) return { bearer_token_env_var: "LAP_GATEWAY_API_KEY" };
+  let internal;
+  try {
+    internal = new URL(internalValue);
+  } catch {
+    throw new Error("LAP_GATEWAY_MCP_INTERNAL_BASE_URL must be an absolute HTTP(S) URL");
+  }
+  if (!(["http:", "https:"].includes(internal.protocol)) || !internal.hostname || internal.username || internal.password) {
+    throw new Error("LAP_GATEWAY_MCP_INTERNAL_BASE_URL must be an absolute HTTP(S) URL");
+  }
+  const relativePath = parsed.pathname.slice(basePath.length);
+  const internalPath = internal.pathname.replace(/\/+$/, "");
+  internal.pathname = `${internalPath}${relativePath}`;
+  internal.search = parsed.search;
+  internal.hash = "";
+  return {
+    url: internal.toString(),
+    bearer_token_env_var: "LAP_GATEWAY_API_KEY",
+  };
 }
 
 export function threadMcpConfig(servers = [], env = process.env) {
