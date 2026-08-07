@@ -45,6 +45,9 @@ reverse proxy; the original public URL is still validated against the trusted
 base before it is rewritten.
 Threads with the LAP platform MCP disable Codex's native collaboration tools,
 so configured LAP sub-agents remain the authoritative orchestration path.
+Platform MCP tool calls have a 31-minute client timeout. LAP waits up to 30
+minutes for a child session to finish, leaving a one-minute margin so LAP can
+return the terminal result before Codex treats the transport as failed.
 
 In LAP, register this root endpoint once as the Codex app-server controller.
 The Runtimes page then creates API, ChatGPT, and Remote SSH profiles through the

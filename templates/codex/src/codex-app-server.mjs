@@ -76,7 +76,13 @@ export function threadMcpConfig(servers = [], env = process.env) {
     }
     configured[name] = {
       url,
-      ...(name === "platform" ? platformMcpCredential(parsed, env) : {}),
+      ...(name === "platform" ? {
+        ...platformMcpCredential(parsed, env),
+        // LAP sub-agents can perform long, multi-tool jobs. Keep the Codex
+        // client alive slightly longer than LAP's 30-minute server timeout so
+        // LAP, rather than the transport, owns the terminal result.
+        tool_timeout_sec: 31 * 60,
+      } : {}),
     };
   }
   return Object.keys(configured).length > 0 ? { mcp_servers: configured } : null;
