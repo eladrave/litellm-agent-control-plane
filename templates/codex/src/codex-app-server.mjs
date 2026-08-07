@@ -82,6 +82,19 @@ export function threadMcpConfig(servers = [], env = process.env) {
   return Object.keys(configured).length > 0 ? { mcp_servers: configured } : null;
 }
 
+export function threadConfig(servers = [], env = process.env) {
+  const mcpConfig = threadMcpConfig(servers, env);
+  const hasPlatformMcp = servers.some((server) => (
+    server && typeof server === "object" && !Array.isArray(server)
+      && String(server.name || "").trim() === "platform"
+  ));
+  if (!hasPlatformMcp) return mcpConfig;
+  return {
+    ...(mcpConfig || {}),
+    features: { multi_agent: false },
+  };
+}
+
 export function normalizeBaseUrl(value) {
   const base = value.replace(/\/+$/, "");
   return base.endsWith("/v1") ? base : `${base}/v1`;
@@ -232,7 +245,7 @@ export class CodexAppServer extends EventEmitter {
   }
 
   async startThread({ cwd, model, instructions, mcpServers = [] }) {
-    const config = threadMcpConfig(mcpServers);
+    const config = threadConfig(mcpServers);
     const params = {
       cwd,
       model,

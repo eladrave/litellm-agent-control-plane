@@ -4,7 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { CodexAppServer, fingerprintForKey, threadMcpConfig } from "../src/codex-app-server.mjs";
+import {
+  CodexAppServer,
+  fingerprintForKey,
+  threadConfig,
+  threadMcpConfig,
+} from "../src/codex-app-server.mjs";
 
 test("formats SSH host keys like OpenSSH SHA256 fingerprints", () => {
   assert.match(fingerprintForKey(Buffer.from("host-key")), /^SHA256:[A-Za-z0-9+/]+$/);
@@ -97,6 +102,36 @@ test("routes a trusted platform MCP over the private control-plane network", () 
         url: "http://lap:4000/internal/mcp/platform/agent_1?session_id=ses_1",
         bearer_token_env_var: "LAP_GATEWAY_API_KEY",
       },
+    },
+  });
+});
+
+test("disables native Codex collaboration for LAP platform MCP threads", () => {
+  const env = {
+    LAP_GATEWAY_MCP_BASE_URL: "https://agents.example.test",
+    LAP_GATEWAY_MCP_INTERNAL_BASE_URL: "http://lap:4000",
+    LAP_GATEWAY_API_KEY: "secret",
+  };
+  assert.deepEqual(threadConfig([
+    {
+      type: "url",
+      name: "platform",
+      url: "https://agents.example.test/mcp/platform/agent_1?session_id=ses_1",
+    },
+  ], env), {
+    mcp_servers: {
+      platform: {
+        url: "http://lap:4000/mcp/platform/agent_1?session_id=ses_1",
+        bearer_token_env_var: "LAP_GATEWAY_API_KEY",
+      },
+    },
+    features: { multi_agent: false },
+  });
+  assert.deepEqual(threadConfig([
+    { type: "url", name: "simplefin", url: "https://simplefin.example.test/mcp" },
+  ], env), {
+    mcp_servers: {
+      simplefin: { url: "https://simplefin.example.test/mcp" },
     },
   });
 });
