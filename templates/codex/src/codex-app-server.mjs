@@ -8,6 +8,61 @@ function toml(value) {
   return JSON.stringify(String(value));
 }
 
+function platformMcpCredential(parsed, env) {
+  const trustedValue = String(env.LAP_GATEWAY_MCP_BASE_URL || "").trim();
+  const credentialValue = String(env.LAP_GATEWAY_API_KEY || "").trim();
+  if (!trustedValue || !credentialValue) {
+    throw new Error(
+      "Codex platform MCP requires LAP_GATEWAY_MCP_BASE_URL and LAP_GATEWAY_API_KEY",
+    );
+  }
+  let trusted;
+  try {
+    trusted = new URL(trustedValue);
+  } catch {
+    throw new Error("LAP_GATEWAY_MCP_BASE_URL must be an absolute HTTP(S) URL");
+  }
+  if (!(["http:", "https:"].includes(trusted.protocol)) || !trusted.hostname) {
+    throw new Error("LAP_GATEWAY_MCP_BASE_URL must be an absolute HTTP(S) URL");
+  }
+  const basePath = trusted.pathname.replace(/\/+$/, "");
+  const platformPath = `${basePath}/mcp/platform/`.replace(/^\/\//, "/");
+  if (parsed.origin !== trusted.origin || !parsed.pathname.startsWith(platformPath)) {
+    throw new Error("Refusing to send the gateway credential to an untrusted platform MCP URL");
+  }
+  return { bearer_token_env_var: "LAP_GATEWAY_API_KEY" };
+}
+
+export function threadMcpConfig(servers = [], env = process.env) {
+  if (!Array.isArray(servers)) throw new Error("mcp_servers must be an array");
+  const configured = {};
+  for (const server of servers) {
+    if (!server || typeof server !== "object" || Array.isArray(server)) {
+      throw new Error("mcp_servers entries must be objects");
+    }
+    const type = String(server.type || "url").trim();
+    if (type !== "url") throw new Error(`Unsupported Codex MCP server type: ${type}`);
+    const name = String(server.name || "").trim();
+    if (!name) throw new Error("Codex MCP servers require a name");
+    if (Object.hasOwn(configured, name)) throw new Error(`Duplicate Codex MCP server name: ${name}`);
+    const url = String(server.url || "").trim();
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error(`Codex MCP server ${name} requires an absolute HTTP(S) URL`);
+    }
+    if (!(["http:", "https:"].includes(parsed.protocol)) || !parsed.hostname) {
+      throw new Error(`Codex MCP server ${name} requires an absolute HTTP(S) URL`);
+    }
+    configured[name] = {
+      url,
+      ...(name === "platform" ? platformMcpCredential(parsed, env) : {}),
+    };
+  }
+  return Object.keys(configured).length > 0 ? { mcp_servers: configured } : null;
+}
+
 export function normalizeBaseUrl(value) {
   const base = value.replace(/\/+$/, "");
   return base.endsWith("/v1") ? base : `${base}/v1`;
@@ -157,7 +212,8 @@ export class CodexAppServer extends EventEmitter {
     this.send({ jsonrpc: "2.0", id: message.id, result });
   }
 
-  async startThread({ cwd, model, instructions }) {
+  async startThread({ cwd, model, instructions, mcpServers = [] }) {
+    const config = threadMcpConfig(mcpServers);
     const params = {
       cwd,
       model,
@@ -165,6 +221,7 @@ export class CodexAppServer extends EventEmitter {
       ...(this.mode === "remote_ssh" ? { sandbox: this.sandbox } : {}),
       developerInstructions: instructions || null,
       ephemeral: false,
+      ...(config ? { config } : {}),
       ...(this.mode === "api" ? { modelProvider: "runtime_backend" } : {}),
     };
     const result = await this.request("thread/start", params);

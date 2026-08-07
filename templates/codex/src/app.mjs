@@ -118,7 +118,12 @@ export function createApp({ store, codex, workspaceRoot, defaultModel, listModel
       ? await createWorkspace(randomId("workspace"))
       : path.join(workspaceRoot, randomId("workspace"));
     if (!createWorkspace) mkdirSync(workspace, { recursive: true });
-    const result = await codex.startThread({ cwd: workspace, model: agent.model, instructions: agent.system });
+    const result = await codex.startThread({
+      cwd: workspace,
+      model: agent.model,
+      instructions: agent.system,
+      mcpServers: agent.mcp_servers,
+    });
     const threadId = result?.thread?.id;
     if (!threadId) throw new Error("Codex thread/start response did not include a thread id");
     const row = store.createSession({
