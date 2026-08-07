@@ -34,6 +34,12 @@ settings can use the aliases `LITELLM_BASE_URL`, `LITELLM_API_KEY`, and
 `LITELLM_DEFAULT_MODEL`. `RUNTIME_API_KEY` protects the runtime HTTP API and is
 separate from the model provider credential.
 
+Agents that use LAP platform MCPs, including `list_sub_agents` and
+`run_sub_agent`, also require `LAP_GATEWAY_API_KEY` and
+`LAP_GATEWAY_MCP_BASE_URL`. The bridge exposes the key to Codex only by
+environment-variable name and only for a `platform` MCP URL on that trusted
+base URL; the credential value is never copied into thread configuration.
+
 In LAP, register this root endpoint once as the Codex app-server controller.
 The Runtimes page then creates API, ChatGPT, and Remote SSH profiles through the
 controller. LAP keeps the controller key server-side and never returns profile

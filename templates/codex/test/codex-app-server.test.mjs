@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { CodexAppServer, fingerprintForKey } from "../src/codex-app-server.mjs";
+import { CodexAppServer, fingerprintForKey, threadMcpConfig } from "../src/codex-app-server.mjs";
 
 test("formats SSH host keys like OpenSSH SHA256 fingerprints", () => {
   assert.match(fingerprintForKey(Buffer.from("host-key")), /^SHA256:[A-Za-z0-9+/]+$/);
@@ -25,6 +25,91 @@ test("keeps remote Codex sandboxed while using the container permission profile 
   await remote.startTurn("remote-thread", "hello", "gpt-test");
   assert.equal(localTurn.permissionProfile, ":danger-full-access");
   assert.equal(remoteTurn.permissionProfile, undefined);
+});
+
+test("projects each agent's MCP servers into its own Codex thread config", async () => {
+  assert.deepEqual(threadMcpConfig([
+    { type: "url", name: "simplefin", url: "https://simplefin.example.test/mcp" },
+  ]), {
+    mcp_servers: {
+      simplefin: { url: "https://simplefin.example.test/mcp" },
+    },
+  });
+
+  const codex = new CodexAppServer({ mode: "chatgpt" });
+  const requests = [];
+  codex.request = async (method, params) => {
+    requests.push({ method, params });
+    return { thread: { id: `thread-${requests.length}` } };
+  };
+  await codex.startThread({
+    cwd: "/workspace/with-mcp",
+    model: "gpt-test",
+    instructions: "Use SimpleFIN when requested.",
+    mcpServers: [{ type: "url", name: "simplefin", url: "https://simplefin.example.test/mcp" }],
+  });
+  await codex.startThread({ cwd: "/workspace/without-mcp", model: "gpt-test", instructions: "" });
+
+  assert.deepEqual(requests[0].params.config, {
+    mcp_servers: {
+      simplefin: { url: "https://simplefin.example.test/mcp" },
+    },
+  });
+  assert.equal(requests[1].params.config, undefined);
+});
+
+test("authenticates only the trusted platform MCP with the gateway credential environment", () => {
+  const env = {
+    LAP_GATEWAY_MCP_BASE_URL: "https://agents.example.test",
+    LAP_GATEWAY_API_KEY: "secret-never-copied-into-config",
+  };
+  assert.deepEqual(threadMcpConfig([
+    {
+      type: "url",
+      name: "platform",
+      url: "https://agents.example.test/mcp/platform/agent_1?session_id=ses_1",
+    },
+  ], env), {
+    mcp_servers: {
+      platform: {
+        url: "https://agents.example.test/mcp/platform/agent_1?session_id=ses_1",
+        bearer_token_env_var: "LAP_GATEWAY_API_KEY",
+      },
+    },
+  });
+});
+
+test("refuses to expose the gateway credential to an untrusted platform MCP", () => {
+  const env = {
+    LAP_GATEWAY_MCP_BASE_URL: "https://agents.example.test",
+    LAP_GATEWAY_API_KEY: "secret",
+  };
+  assert.throws(
+    () => threadMcpConfig([
+      { type: "url", name: "platform", url: "https://attacker.example/mcp/platform/agent_1" },
+    ], env),
+    /untrusted platform MCP URL/,
+  );
+  assert.throws(
+    () => threadMcpConfig([
+      { type: "url", name: "platform", url: "https://agents.example.test/not-platform" },
+    ], env),
+    /untrusted platform MCP URL/,
+  );
+});
+
+test("rejects invalid MCP definitions before starting a Codex thread", () => {
+  assert.throws(
+    () => threadMcpConfig([{ type: "url", name: "simplefin", url: "simplefin" }]),
+    /absolute HTTP\(S\) URL/,
+  );
+  assert.throws(
+    () => threadMcpConfig([
+      { type: "url", name: "duplicate", url: "https://one.example.test/mcp" },
+      { type: "url", name: "duplicate", url: "https://two.example.test/mcp" },
+    ]),
+    /Duplicate Codex MCP server name/,
+  );
 });
 
 test("ChatGPT mode uses native account and model RPCs without an API provider", async (t) => {
