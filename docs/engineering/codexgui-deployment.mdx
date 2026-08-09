@@ -63,6 +63,10 @@ The Compose stack runs these long-lived services:
 The `register-*` services are one-shot, idempotent registration jobs. They are
 expected to finish with exit code zero rather than remain running.
 
+For parent/child design, runtime tool dependencies, timeout ownership, and
+end-to-end acceptance, see
+[Managed agent orchestration](/engineering/managed-agent-orchestration).
+
 ## Security and persistence invariants
 
 - The LAP service publishes no host port. Only Caddy can reach it, through the
@@ -510,6 +514,26 @@ Then perform browser acceptance at `https://agents.eladrave.com`:
 
 Container health alone is not release acceptance. At least one real agent turn
 through the production browser path is required.
+
+For workflows that use shell tools, verify the required executables inside the
+runtime container before starting acceptance. The Codex runtime image carries
+the supported baseline; do not install packages during an agent session:
+
+```bash
+docker exec litellm-agent-control-plane-codex-1 sh -lc \
+  'command -v curl git jq rg file pdfinfo pdftotext pdftoppm python3'
+
+docker exec litellm-agent-control-plane-codex-1 python3 -c \
+  'import pymupdf, reportlab'
+```
+
+The command watchdog defaults to 600 seconds. Override it only through the
+non-secret deployment environment and keep it below the 30-minute LAP
+sub-agent deadline:
+
+```text
+CODEX_COMMAND_TIMEOUT_SEC=600
+```
 
 ## Roll back
 

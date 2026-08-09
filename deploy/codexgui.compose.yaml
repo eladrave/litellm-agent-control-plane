@@ -109,6 +109,7 @@ services:
       LAP_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY}
       LAP_GATEWAY_MCP_BASE_URL: ${LAP_GATEWAY_MCP_BASE_URL:-}
       LAP_GATEWAY_MCP_INTERNAL_BASE_URL: ${LAP_GATEWAY_MCP_INTERNAL_BASE_URL:-http://lap:4000}
+      CODEX_COMMAND_TIMEOUT_SEC: ${CODEX_COMMAND_TIMEOUT_SEC:-600}
     volumes:
       - ${STATE_ROOT:-/var/lib/litellm-agent-control-plane}/codex-data:/data
       - ${STATE_ROOT:-/var/lib/litellm-agent-control-plane}/codex-home:/codex-home
