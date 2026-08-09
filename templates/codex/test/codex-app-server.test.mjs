@@ -172,6 +172,57 @@ test("rejects invalid MCP definitions before starting a Codex thread", () => {
   );
 });
 
+test("interrupts a command that never emits item/completed", async () => {
+  const codex = new CodexAppServer({ mode: "chatgpt", commandTimeoutMs: 10 });
+  const interruptions = [];
+  codex.interrupt = async (threadId, turnId) => interruptions.push({ threadId, turnId });
+  let terminal;
+  codex.on("notification", (method, params) => {
+    if (method === "error") terminal = params;
+  });
+
+  codex.onLine(JSON.stringify({
+    method: "item/started",
+    params: {
+      threadId: "thread-stalled",
+      turnId: "turn-stalled",
+      item: { id: "command-stalled", type: "commandExecution" },
+    },
+  }));
+
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.match(terminal.message, /timed out after 1 seconds/);
+  assert.deepEqual(interruptions, [{ threadId: "thread-stalled", turnId: "turn-stalled" }]);
+  assert.equal(codex.activeCommands.size, 0);
+});
+
+test("clears the command watchdog after item/completed", async () => {
+  const codex = new CodexAppServer({ mode: "chatgpt", commandTimeoutMs: 10 });
+  const notifications = [];
+  codex.on("notification", (method) => notifications.push(method));
+
+  codex.onLine(JSON.stringify({
+    method: "item/started",
+    params: {
+      threadId: "thread-complete",
+      turnId: "turn-complete",
+      item: { id: "command-complete", type: "commandExecution" },
+    },
+  }));
+  codex.onLine(JSON.stringify({
+    method: "item/completed",
+    params: {
+      threadId: "thread-complete",
+      turnId: "turn-complete",
+      item: { id: "command-complete", type: "commandExecution" },
+    },
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 25));
+
+  assert.deepEqual(notifications, ["item/started", "item/completed"]);
+  assert.equal(codex.activeCommands.size, 0);
+});
+
 test("ChatGPT mode uses native account and model RPCs without an API provider", async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "fake-codex-"));
   const executable = path.join(root, "codex");

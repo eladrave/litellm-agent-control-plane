@@ -107,7 +107,17 @@ export function normalizeBaseUrl(value) {
 }
 
 export class CodexAppServer extends EventEmitter {
-  constructor({ mode = "api", baseUrl, apiKey, defaultModel, codexHome, codexBin = "codex", ssh = null, sandbox = null }) {
+  constructor({
+    mode = "api",
+    baseUrl,
+    apiKey,
+    defaultModel,
+    codexHome,
+    codexBin = "codex",
+    ssh = null,
+    sandbox = null,
+    commandTimeoutMs = configuredCommandTimeoutMs(process.env),
+  }) {
     super();
     this.mode = mode;
     this.baseUrl = baseUrl ? normalizeBaseUrl(baseUrl) : null;
@@ -122,6 +132,8 @@ export class CodexAppServer extends EventEmitter {
     this.localPermissionProfile = process.env.CODEX_LOCAL_PERMISSION_PROFILE || ":danger-full-access";
     this.pending = new Map();
     this.threads = new Set();
+    this.commandTimeoutMs = commandTimeoutMs;
+    this.activeCommands = new Map();
     this.nextId = 1;
     this.child = null;
     this.sshClient = null;
@@ -235,7 +247,70 @@ export class CodexAppServer extends EventEmitter {
       this.answerServerRequest(message);
       return;
     }
-    if (message.method) this.emit("notification", message.method, message.params || {});
+    if (message.method) {
+      const params = message.params || {};
+      this.observeNotification(message.method, params);
+      this.emit("notification", message.method, params);
+    }
+  }
+
+  observeNotification(method, params) {
+    const item = params?.item;
+    if (method === "item/started" && item?.type === "commandExecution") {
+      this.trackCommand(params.threadId, params.turnId, item.id);
+      return;
+    }
+    if (method === "item/completed" && item?.id) {
+      this.clearCommand(item.id);
+      return;
+    }
+    if (method === "turn/completed" || (method === "error" && !params?.willRetry)) {
+      this.clearCommandsForTurn(params?.threadId, params?.turn?.id || params?.turnId);
+    }
+  }
+
+  trackCommand(threadId, turnId, itemId) {
+    if (!threadId || !itemId || this.commandTimeoutMs <= 0) return;
+    this.clearCommand(itemId);
+    const timer = setTimeout(() => {
+      const active = this.activeCommands.get(itemId);
+      if (!active) return;
+      this.activeCommands.delete(itemId);
+      const seconds = Math.ceil(this.commandTimeoutMs / 1000);
+      const message = `Codex command execution timed out after ${seconds} seconds`;
+      this.emit("notification", "error", {
+        threadId: active.threadId,
+        turnId: active.turnId,
+        willRetry: false,
+        message,
+      });
+      if (active.turnId) {
+        this.interrupt(active.threadId, active.turnId).catch((error) => {
+          process.stderr.write(`[codex:${this.mode}] failed to interrupt timed-out command: ${error.message}\n`);
+        });
+      }
+    }, this.commandTimeoutMs);
+    timer.unref?.();
+    this.activeCommands.set(itemId, { threadId, turnId, timer });
+  }
+
+  clearCommand(itemId) {
+    const active = this.activeCommands.get(itemId);
+    if (!active) return;
+    clearTimeout(active.timer);
+    this.activeCommands.delete(itemId);
+  }
+
+  clearCommandsForTurn(threadId, turnId) {
+    for (const [itemId, active] of this.activeCommands) {
+      if (threadId && active.threadId !== threadId) continue;
+      if (turnId && active.turnId && active.turnId !== turnId) continue;
+      this.clearCommand(itemId);
+    }
+  }
+
+  clearCommandTimers() {
+    for (const itemId of [...this.activeCommands.keys()]) this.clearCommand(itemId);
   }
 
   answerServerRequest(message) {
@@ -312,6 +387,7 @@ export class CodexAppServer extends EventEmitter {
     this.child = null;
     this.input = null;
     this.threads.clear();
+    this.clearCommandTimers();
     for (const { reject } of this.pending.values()) reject(error);
     this.pending.clear();
     if (child) this.emit("exit", error);
@@ -324,6 +400,7 @@ export class CodexAppServer extends EventEmitter {
   }
 
   stop() {
+    this.clearCommandTimers();
     if (this.child?.kill) this.child.kill("SIGTERM");
     else this.child?.close?.();
     this.sshClient?.end();
@@ -331,6 +408,12 @@ export class CodexAppServer extends EventEmitter {
     this.child = null;
     this.input = null;
   }
+}
+
+function configuredCommandTimeoutMs(env) {
+  const seconds = Number(env.CODEX_COMMAND_TIMEOUT_SEC || 600);
+  if (!Number.isFinite(seconds) || seconds < 0) return 600_000;
+  return Math.floor(seconds * 1000);
 }
 
 function normalizeFingerprint(value) {
