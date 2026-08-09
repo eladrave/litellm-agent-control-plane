@@ -47,6 +47,18 @@ The parent should call `list_sub_agents` when it needs discovery and
 using the output. Valid terminal statuses are `completed`, `failed`, and
 `timed_out`.
 
+## Start a parent manually
+
+Use `POST /api/agents/{agent_id}/run` with an optional `prompt`. For an agent
+whose configuration selects a managed runtime, this endpoint creates a real
+runtime session and returns its `session_id`, runtime event stream URL, and
+runtime-event log URL. It does not execute the legacy local harness in the LAP
+API container. The web UI's session flow reaches the same managed runtime.
+
+Agents without a configured managed runtime continue to use the legacy harness
+run path. Do not fix a managed-runtime launch failure by adding Node, npm, or an
+agent SDK to the LAP API image; route the run to its configured runtime instead.
+
 ## Prefer file-based contracts for large results
 
 Large inline child responses are expensive and can be truncated or duplicated
