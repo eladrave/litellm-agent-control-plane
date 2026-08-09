@@ -59,7 +59,6 @@ pub async fn append_many(
     .fetch_one(tx.as_mut())
     .await
     .map_err(GatewayError::Database)?;
-
     let next_seq: i32 = sqlx::query_scalar(
         r#"
         SELECT COALESCE(MAX(seq), 0) + 1
