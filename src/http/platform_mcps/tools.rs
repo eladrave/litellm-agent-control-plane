@@ -192,11 +192,19 @@ async fn collect_sub_agent_stream(
     timeout: Duration,
 ) -> Result<SubAgentOutput, GatewayError> {
     let mut text = String::new();
+    let mut message_item_id: Option<String> = None;
     let terminal = tokio::time::timeout(timeout, async {
         while let Some(event) = stream.next().await {
             let event = event.map_err(|error| GatewayError::SandboxError(error.to_string()))?;
             match event.kind() {
-                AgentEventKind::AgentMessage => text.push_str(&message_text(&event)),
+                AgentEventKind::AgentMessage => {
+                    let next_item_id = agent_message_item_id(&event);
+                    if next_item_id != message_item_id {
+                        text.clear();
+                        message_item_id = next_item_id;
+                    }
+                    text.push_str(&message_text(&event));
+                }
                 AgentEventKind::SessionStatusIdle => {
                     return Ok::<(&'static str, Option<String>), GatewayError>(("completed", None))
                 }
@@ -242,6 +250,16 @@ fn message_text(event: &AgentEvent) -> String {
         .filter_map(|part| part.get("text").and_then(Value::as_str))
         .collect::<Vec<_>>()
         .join("")
+}
+
+fn agent_message_item_id(event: &AgentEvent) -> Option<String> {
+    event
+        .data
+        .get("item_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|item_id| !item_id.is_empty())
+        .map(str::to_owned)
 }
 
 fn session_error_message(event: &AgentEvent) -> String {
@@ -308,6 +326,44 @@ mod tests {
         assert_eq!(output.status, "failed");
         assert_eq!(output.text, "partial result");
         assert_eq!(output.error.as_deref(), Some("command timed out"));
+    }
+
+    #[tokio::test]
+    async fn returns_only_the_final_agent_message_item() {
+        let events = stream::iter(vec![
+            Ok(event(
+                "agent.message",
+                json!({
+                    "item_id": "commentary-1",
+                    "content": [{"type": "text", "text": "Checking the source now."}]
+                }),
+            )),
+            Ok(event(
+                "agent.message",
+                json!({
+                    "item_id": "final-1",
+                    "content": [{"type": "text", "text": "{\"status\":"}]
+                }),
+            )),
+            Ok(event(
+                "agent.message",
+                json!({
+                    "item_id": "final-1",
+                    "content": [{"type": "text", "text": "\"complete\"}"}]
+                }),
+            )),
+            Ok(event(
+                "session.status_idle",
+                json!({"stop_reason": {"type": "end_turn"}}),
+            )),
+        ]);
+        let output = collect_sub_agent_stream(Box::pin(events), Duration::from_secs(1))
+            .await
+            .unwrap();
+
+        assert_eq!(output.status, "completed");
+        assert_eq!(output.text, "{\"status\":\"complete\"}");
+        assert_eq!(output.error, None);
     }
 
     #[tokio::test]
