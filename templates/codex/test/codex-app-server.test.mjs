@@ -59,6 +59,7 @@ test("projects each agent's MCP servers into its own Codex thread config", async
     mcp_servers: {
       simplefin: { url: "https://simplefin.example.test/mcp" },
     },
+    "features.apps": false,
   });
   assert.equal(requests[1].params.config, undefined);
 });
@@ -128,6 +129,7 @@ test("disables native Codex collaboration for LAP platform MCP threads", () => {
         tool_timeout_sec: 1860,
       },
     },
+    "features.apps": false,
     "agents.enabled": false,
     "features.multi_agent": false,
     "features.multi_agent_v2": false,
@@ -138,6 +140,7 @@ test("disables native Codex collaboration for LAP platform MCP threads", () => {
     mcp_servers: {
       simplefin: { url: "https://simplefin.example.test/mcp" },
     },
+    "features.apps": false,
   });
 });
 
