@@ -90,13 +90,17 @@ export function threadMcpConfig(servers = [], env = process.env) {
 
 export function threadConfig(servers = [], env = process.env) {
   const mcpConfig = threadMcpConfig(servers, env);
+  const managedMcpConfig = mcpConfig ? {
+    ...mcpConfig,
+    "features.apps": false,
+  } : null;
   const hasPlatformMcp = servers.some((server) => (
     server && typeof server === "object" && !Array.isArray(server)
       && String(server.name || "").trim() === "platform"
   ));
-  if (!hasPlatformMcp) return mcpConfig;
+  if (!hasPlatformMcp) return managedMcpConfig;
   return {
-    ...(mcpConfig || {}),
+    ...(managedMcpConfig || {}),
     "agents.enabled": false,
     "features.multi_agent": false,
     "features.multi_agent_v2": false,

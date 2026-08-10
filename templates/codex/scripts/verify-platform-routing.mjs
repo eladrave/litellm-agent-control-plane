@@ -110,6 +110,7 @@ try {
 
   const platformThread = await startThread({
     mcp_servers: { platform: { url: `http://127.0.0.1:${address.port}/mcp` } },
+    "features.apps": false,
     "agents.enabled": false,
     "features.multi_agent": false,
     "features.multi_agent_v2": false,
@@ -136,6 +137,7 @@ try {
     assert.ok(!platformRequestText.includes(marker), `platform thread must not describe ${marker}`);
   }
   assert.ok(platformRequestText.includes("run_sub_agent"), "platform thread must expose run_sub_agent");
+  assert.ok(!platformRequestText.includes("codex_apps."), "platform thread must not expose account apps");
 } finally {
   codex.stop();
   await new Promise((resolve) => server.close(resolve));
