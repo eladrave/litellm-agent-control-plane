@@ -32,6 +32,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY src ./src
+COPY scripts/verify-platform-routing.mjs ./scripts/verify-platform-routing.mjs
+RUN node scripts/verify-platform-routing.mjs
 
 RUN chmod -R a=rX /app \
     && groupadd --gid 10001 app \

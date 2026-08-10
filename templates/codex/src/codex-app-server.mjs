@@ -97,7 +97,9 @@ export function threadConfig(servers = [], env = process.env) {
   if (!hasPlatformMcp) return mcpConfig;
   return {
     ...(mcpConfig || {}),
-    features: { multi_agent: false },
+    "agents.enabled": false,
+    "features.multi_agent": false,
+    "features.multi_agent_v2": false,
   };
 }
 

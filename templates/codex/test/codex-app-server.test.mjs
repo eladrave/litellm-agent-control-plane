@@ -128,7 +128,9 @@ test("disables native Codex collaboration for LAP platform MCP threads", () => {
         tool_timeout_sec: 1860,
       },
     },
-    features: { multi_agent: false },
+    "agents.enabled": false,
+    "features.multi_agent": false,
+    "features.multi_agent_v2": false,
   });
   assert.deepEqual(threadConfig([
     { type: "url", name: "simplefin", url: "https://simplefin.example.test/mcp" },
